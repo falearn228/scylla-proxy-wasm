@@ -10,24 +10,32 @@ import (
 	"sync"
 
 	"github.com/tetratelabs/wazero"
+	"github.com/tetratelabs/wazero/api"
 	"github.com/tetratelabs/wazero/imports/wasi_snapshot_preview1"
 )
 
 type Engine struct {
-	runtime wazero.Runtime
-	modules map[string]wazero.CompiledModule
-	mu      sync.RWMutex
+	runtime  wazero.Runtime
+	modules  map[string]wazero.CompiledModule
+	pools    map[string]chan api.Module
+	poolSize int
+	mu       sync.RWMutex
 }
 
-func NewEngine() (*Engine, error) {
+func NewEngine(poolSize int) (*Engine, error) {
 	runtime := wazero.NewRuntime(context.Background())
 	_, err := wasi_snapshot_preview1.Instantiate(context.Background(), runtime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to instantiate WASI: %w", err)
 	}
+	if poolSize < 0 {
+		poolSize = 0
+	}
 	return &Engine{
-		runtime: runtime,
-		modules: make(map[string]wazero.CompiledModule),
+		runtime:  runtime,
+		modules:  make(map[string]wazero.CompiledModule),
+		pools:    make(map[string]chan api.Module),
+		poolSize: poolSize,
 	}, nil
 }
 
@@ -42,9 +50,26 @@ func (e *Engine) LoadModule(path string) error {
 		return fmt.Errorf("failed to compile WASM module %s: %w", path, err)
 	}
 
+	moduleName := filepath.Base(path)
+
 	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.modules[filepath.Base(path)] = compiled
+	e.modules[moduleName] = compiled
+	if e.poolSize > 0 {
+		pool := make(chan api.Module, e.poolSize)
+		e.pools[moduleName] = pool
+		e.mu.Unlock()
+		for i := 0; i < e.poolSize; i++ {
+			instance, err := e.instantiate(context.Background(), compiled)
+			if err != nil {
+				log.Printf("Failed to pre-instantiate module %s: %v", moduleName, err)
+				break
+			}
+			pool <- instance
+		}
+	} else {
+		e.mu.Unlock()
+	}
+
 	log.Printf("Loaded WASM module: %s", path)
 	return nil
 }
@@ -67,19 +92,12 @@ func (e *Engine) LoadDirectory(dir string) error {
 }
 
 func (e *Engine) Transform(data []byte, moduleName string) ([]byte, error) {
-	e.mu.RLock()
-	compiled, ok := e.modules[moduleName]
-	e.mu.RUnlock()
-	if !ok {
-		return data, fmt.Errorf("WASM module %s not found", moduleName)
-	}
-
 	ctx := context.Background()
-	module, err := e.runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig())
+	module, release, err := e.acquireModule(ctx, moduleName)
 	if err != nil {
-		return data, fmt.Errorf("failed to instantiate module: %w", err)
+		return data, err
 	}
-	defer module.Close(ctx)
+	defer release()
 
 	transformFn := module.ExportedFunction("transform")
 	if transformFn == nil {
@@ -138,5 +156,69 @@ func (e *Engine) ListModules() []string {
 }
 
 func (e *Engine) Close() error {
+	e.mu.Lock()
+	pools := e.pools
+	e.pools = make(map[string]chan api.Module)
+	e.mu.Unlock()
+
+	for _, pool := range pools {
+		close(pool)
+		for module := range pool {
+			module.Close(context.Background())
+		}
+	}
 	return e.runtime.Close(context.Background())
+}
+
+func (e *Engine) instantiate(ctx context.Context, compiled wazero.CompiledModule) (api.Module, error) {
+	return e.runtime.InstantiateModule(ctx, compiled, wazero.NewModuleConfig())
+}
+
+func (e *Engine) acquireModule(ctx context.Context, moduleName string) (api.Module, func(), error) {
+	e.mu.RLock()
+	compiled, ok := e.modules[moduleName]
+	pool := e.pools[moduleName]
+	e.mu.RUnlock()
+	if !ok {
+		return nil, func() {}, fmt.Errorf("WASM module %s not found", moduleName)
+	}
+
+	if pool != nil {
+		select {
+		case module := <-pool:
+			return module, func() {
+				e.releaseModule(ctx, moduleName, module)
+			}, nil
+		default:
+		}
+	}
+
+	module, err := e.instantiate(ctx, compiled)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("failed to instantiate module: %w", err)
+	}
+
+	return module, func() {
+		module.Close(ctx)
+	}, nil
+}
+
+func (e *Engine) releaseModule(ctx context.Context, moduleName string, module api.Module) {
+	e.mu.RLock()
+	pool := e.pools[moduleName]
+	e.mu.RUnlock()
+	if pool == nil {
+		module.Close(ctx)
+		return
+	}
+	defer func() {
+		if recover() != nil {
+			module.Close(ctx)
+		}
+	}()
+	select {
+	case pool <- module:
+	default:
+		module.Close(ctx)
+	}
 }

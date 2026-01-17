@@ -2,3 +2,8 @@ listen_addr: "localhost:9042"
 target_addr: "127.0.0.1:9043"
 wasm_dir: "./wasm_scripts"
 log_level: "info"
+wasm_instance_pool_size: 10
+tls:
+  enabled: true
+  cert_file: "certs/server.crt"
+  key_file: "certs/server.key"

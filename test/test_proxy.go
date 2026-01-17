@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/user/scylla-proxy/internal/config"
@@ -12,30 +13,38 @@ import (
 
 func main() {
 	cfg := &config.Config{
-		ListenAddr: "127.0.0.1:19042",
-		TargetAddr: "127.0.0.1:19043",
+		ListenAddr: "127.0.0.1:8080",
+		TargetAddr: "127.0.0.1:9043",
 		WASMDir:    "./wasm_scripts",
-		LogLevel:   "debug",
+		LogLevel:   "info",
 	}
 
 	srv, err := proxy.New(cfg)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error proxy", err)
 	}
 
+	var wg sync.WaitGroup
+	wg.Add(1)
+	
 	go func() {
-		time.Sleep(2 * time.Second)
+		defer wg.Done()
+		// Wait for server to be ready
+		time.Sleep(500 * time.Millisecond)
 		testClient()
+		// Give some time for the proxy to process
+		time.Sleep(500 * time.Millisecond)
 		srv.Stop()
 	}()
-
+	
 	if err := srv.Start(); err != nil {
-		log.Fatal(err)
+		log.Fatal("fatal error serve", err)
 	}
+	wg.Wait()
 }
 
 func testClient() {
-	conn, err := net.Dial("tcp", "127.0.0.1:19042")
+	conn, err := net.Dial("tcp", "127.0.0.1:8080")
 	if err != nil {
 		log.Printf("Client connect error: %v", err)
 		return
@@ -49,9 +58,10 @@ func testClient() {
 	}
 
 	buf := make([]byte, 1024)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 	n, err := conn.Read(buf)
 	if err != nil {
-		log.Printf("Read error: %v", err)
+		log.Printf("Read error test: %v", err)
 		return
 	}
 	fmt.Printf("Received: %s\n", buf[:n])
