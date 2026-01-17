@@ -53,19 +53,26 @@ fi
 # Test CQL connection
 echo ""
 echo "Testing CQL connection..."
-cat > /tmp/test_cql.go << 'EOF'
+TEST_DIR="$HOME/go_test_cql_$$"
+mkdir -p "$TEST_DIR"
+cat > "$TEST_DIR/test_cql.go" << 'EOF'
 package main
 
 import (
     "fmt"
     "log"
     "time"
-
+    "os"
     "github.com/gocql/gocql"
 )
 
 func main() {
-    cluster := gocql.NewCluster("scylla")
+    host := "scylla"
+    // Если запущено на хосте, используем localhost:9042
+    if os.Getenv("RUN_ON_HOST") == "1" {
+        host = "localhost"
+    }
+    cluster := gocql.NewCluster(host)
     cluster.Keyspace = "system"
     cluster.Timeout = 10 * time.Second
     
@@ -85,10 +92,23 @@ func main() {
 EOF
 
 # Install gocql and run test
-cd /tmp
-go mod init test_cql 2>/dev/null || true
-go get github.com/gocql/gocql@latest
-go run test_cql.go 2>/dev/null || echo "CQL test skipped (gocql not installed)"
+cd "$TEST_DIR"
+if [ ! -f "go.mod" ]; then
+    go mod init test_cql
+fi
+
+if go mod tidy; then
+    echo "gocql downloaded successfully"
+    export RUN_ON_HOST=1
+    if go run test_cql.go; then
+        echo "CQL test passed!"
+    else
+        echo "CQL test failed (connection issue or other error)"
+    fi
+else
+    echo "CQL test skipped (gocql download failed)"
+fi
+rm -rf "$TEST_DIR"
 
 echo ""
 echo "=== All health checks passed! ==="

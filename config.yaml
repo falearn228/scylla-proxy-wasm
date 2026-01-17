@@ -1,5 +1,5 @@
-listen_addr: "localhost:9042"
-target_addr: "127.0.0.1:9043"
+listen_addr: "0.0.0.0:9042"
+target_addr: "scylla:9042"
 wasm_dir: "./wasm_scripts"
 log_level: "info"
 wasm_instance_pool_size: 10
@@ -9,6 +9,6 @@ metrics_enabled: true
 metrics_port: 9090
 health_port: 8080
 tls:
-  enabled: true
+  enabled: false
   cert_file: "certs/server.crt"
   key_file: "certs/server.key"

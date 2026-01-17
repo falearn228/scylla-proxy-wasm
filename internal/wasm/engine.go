@@ -123,7 +123,7 @@ func (e *Engine) ReloadModule(path string) error {
 	if e.poolSize > 0 {
 		pool := make(chan api.Module, e.poolSize)
 		e.pools[moduleName] = pool
-		e.mu.Unlock()
+		// Keep mutex locked during instantiation
 		for i := 0; i < e.poolSize; i++ {
 			instance, err := e.instantiate(context.Background(), compiled)
 			if err != nil {
@@ -132,9 +132,8 @@ func (e *Engine) ReloadModule(path string) error {
 			}
 			pool <- instance
 		}
-	} else {
-		e.mu.Unlock()
 	}
+	e.mu.Unlock()
 
 	log.Printf("[HOT RELOAD] Successfully reloaded WASM module: %s", moduleName)
 	return nil
@@ -199,28 +198,43 @@ func (e *Engine) checkForChanges(modTimes map[string]time.Time) {
 		path := filepath.Join(e.watchDir, f.Name())
 		modTime := f.ModTime()
 
+		// Check if module already loaded
+		moduleName := f.Name()
+		e.mu.RLock()
+		_, alreadyLoaded := e.modules[moduleName]
+		e.mu.RUnlock()
+
 		if lastMod, ok := modTimes[path]; ok {
 			if modTime.After(lastMod) {
-				log.Printf("[HOT RELOAD] Detected change in: %s", f.Name())
-				if err := e.ReloadModule(path); err != nil {
-					log.Printf("[HOT RELOAD] Failed to reload module %s: %v", f.Name(), err)
+				if alreadyLoaded {
+					log.Printf("[HOT RELOAD] Detected change in: %s", f.Name())
+					if err := e.ReloadModule(path); err != nil {
+						log.Printf("[HOT RELOAD] Failed to reload module %s: %v", f.Name(), err)
+					} else {
+						modTimes[path] = modTime
+					}
 				} else {
 					modTimes[path] = modTime
 				}
 			}
 		} else {
-			// New file
-			modTimes[path] = modTime
-			log.Printf("[HOT RELOAD] Detected new WASM file: %s", f.Name())
-			if err := e.LoadModule(path); err != nil {
-				log.Printf("[HOT RELOAD] Failed to load new module %s: %v", f.Name(), err)
+			// New file - only load if not already loaded
+			if !alreadyLoaded {
+				modTimes[path] = modTime
+				log.Printf("[HOT RELOAD] Detected new WASM file: %s", f.Name())
+				if err := e.LoadModule(path); err != nil {
+					log.Printf("[HOT RELOAD] Failed to load new module %s: %v", f.Name(), err)
+				}
+			} else {
+				// Already loaded, just track mod time
+				modTimes[path] = modTime
 			}
 		}
 	}
 }
 
 func (e *Engine) LoadDirectory(dir string) error {
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return os.MkdirAll(dir, 0755)

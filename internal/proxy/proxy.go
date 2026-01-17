@@ -141,10 +141,13 @@ func (s *Server) startHealthServer() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", s.handleHealthz)
+	mux.HandleFunc("/healthz/", s.handleHealthz)
 	mux.HandleFunc("/ready", s.handleReady)
+	mux.HandleFunc("/ready/", s.handleReady)
 
 	srv := &http.Server{
-		Addr: addr,
+		Addr:    addr,
+		Handler: mux,
 	}
 
 	go func() {
