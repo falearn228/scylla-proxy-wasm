@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bytes"
 	"log"
 
 	"github.com/falearn/scylla-proxy-wasm/internal/wasm"
@@ -37,21 +36,4 @@ func (t *Transformer) TransformResponse(data []byte) ([]byte, error) {
 	module := modules[0]
 	log.Printf("Transforming response with module %s", module)
 	return t.engine.Transform(data, module)
-}
-
-// Detect if data contains PII fields (simplified)
-func containsPII(data []byte) bool {
-	// Very naive detection
-	keywords := [][]byte{
-		[]byte("email"),
-		[]byte("phone"),
-		[]byte("ssn"),
-		[]byte("password"),
-	}
-	for _, kw := range keywords {
-		if bytes.Contains(data, kw) {
-			return true
-		}
-	}
-	return false
 }
