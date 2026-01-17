@@ -2,6 +2,7 @@ package config
 
 import (
 	"io/ioutil"
+	"time"
 
 	"gopkg.in/yaml.v2"
 )
@@ -17,12 +18,17 @@ type TLSConfig struct {
 }
 
 type Config struct {
-	ListenAddr           string    `yaml:"listen_addr"`
-	TargetAddr           string    `yaml:"target_addr"`
-	WASMDir              string    `yaml:"wasm_dir"`
-	LogLevel             string    `yaml:"log_level"`
-	WASMInstancePoolSize int       `yaml:"wasm_instance_pool_size"`
-	TLS                  TLSConfig `yaml:"tls"`
+	ListenAddr           string        `yaml:"listen_addr"`
+	TargetAddr           string        `yaml:"target_addr"`
+	WASMDir              string        `yaml:"wasm_dir"`
+	LogLevel             string        `yaml:"log_level"`
+	WASMInstancePoolSize int           `yaml:"wasm_instance_pool_size"`
+	HotReloadEnabled     bool          `yaml:"hot_reload_enabled"`
+	HotReloadInterval    time.Duration `yaml:"hot_reload_interval"`
+	MetricsEnabled       bool          `yaml:"metrics_enabled"`
+	MetricsPort          int           `yaml:"metrics_port"`
+	HealthPort           int           `yaml:"health_port"`
+	TLS                  TLSConfig     `yaml:"tls"`
 }
 
 func Load(path string) (*Config, error) {

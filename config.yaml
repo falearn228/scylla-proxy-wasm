@@ -3,6 +3,11 @@ target_addr: "127.0.0.1:9043"
 wasm_dir: "./wasm_scripts"
 log_level: "info"
 wasm_instance_pool_size: 10
+hot_reload_enabled: true
+hot_reload_interval: 5s
+metrics_enabled: true
+metrics_port: 9090
+health_port: 8080
 tls:
   enabled: true
   cert_file: "certs/server.crt"

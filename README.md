@@ -8,6 +8,7 @@
 - **WASM-трансформации**: Загружает пользовательские WebAssembly-скрипты для модификации запросов/ответов.
 - **Маскирование PII**: Пример использования — скрытие email, телефонов, SSN в реальном времени.
 - **Гибкая конфигурация**: Настройка адресов, каталога скриптов, уровня логирования.
+- **Поддержка TLS**: Опциональное шифрование трафика между клиентом и прокси.
 - **Написано на Go**: Высокая производительность, низкие задержки.
 
 ## Архитектура
@@ -44,6 +45,10 @@ listen_addr: "127.0.0.1:9042"
 target_addr: "127.0.0.1:9043"
 wasm_dir: "./wasm_scripts"
 log_level: "info"
+tls:
+  enabled: false
+  cert_file: "certs/server.crt"
+  key_file: "certs/server.key"
 ```
 
 ## WASM-скрипты
@@ -71,7 +76,12 @@ wat2wasm example.wat -o example.wasm
 
 ## Тестирование
 
-Запустите тестовый клиент:
+### Интеграционные тесты:
+```bash
+./scripts/test_integration.sh
+```
+
+### Тестовый клиент:
 ```bash
 cd test
 go run test_proxy.go
@@ -82,21 +92,35 @@ go run test_proxy.go
 ```
 scylla-proxy/
 ├── cmd/main.go              # Точка входа
+├── certs/                   # Сертификаты TLS
+│   ├── server.crt
+│   └── server.key
 ├── internal/
 │   ├── config/              # Загрузка конфигурации
 │   ├── proxy/               # Логика TCP-прокси
+│   │   ├── proxy.go
+│   │   └── transform.go
 │   └── wasm/                # Движок WASM (wazero)
-├── pkg/                     # Публичные пакеты (если нужно)
-├── wasm_scripts/            # Пользовательские WASM-скрипты
+│       └── engine.go
+├── scripts/                 # Скрипты для разработки и тестирования
+│   ├── echo_server.go
+│   ├── start_scylla_mock.sh
+│   └── test_integration.sh
 ├── test/                    # Тесты
-└── config.yaml              # Конфигурация по умолчанию
+│   ├── test_proxy.go
+│   └── wasm_scripts/
+├── wasm_scripts/            # Пользовательские WASM-скрипты
+│   ├── example.wat
+│   └── example.wasm
+├── config.yaml              # Конфигурация по умолчанию
+├── go.mod
+└── README.md
 ```
 
 ## Зависимости
 
 - Go 1.23+
 - [wazero](https://github.com/tetratelabs/wazero) — среда выполнения WebAssembly
-- [gocqlx](https://github.com/scylladb/gocqlx) (для расширений CQL, опционально)
 - [yaml.v2](https://gopkg.in/yaml.v2) — парсинг YAML
 
 ## Разработка
@@ -105,12 +129,6 @@ scylla-proxy/
 2. Скомпилируйте в `.wasm`.
 3. Положите в `wasm_scripts/`.
 4. Перезапустите прокси.
-
-## Ограничения
-
-- Текущая версия работает только с сырым TCP-трафиком (не разбирает протокол CQL).
-- Для реального использования требуется интеграция с парсером CQL.
-- Нет нагрузки, балансировки, TLS.
 
 ## Лицензия
 

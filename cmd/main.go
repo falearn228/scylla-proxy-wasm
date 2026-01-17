@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/user/scylla-proxy/internal/config"
-	"github.com/user/scylla-proxy/internal/proxy"
+	"github.com/falearn/scylla-proxy-wasm/internal/config"
+	"github.com/falearn/scylla-proxy-wasm/internal/proxy"
 )
 
 func main() {

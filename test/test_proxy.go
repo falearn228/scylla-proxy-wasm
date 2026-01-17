@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/user/scylla-proxy/internal/config"
-	"github.com/user/scylla-proxy/internal/proxy"
+	"github.com/falearn/scylla-proxy-wasm/internal/config"
+	"github.com/falearn/scylla-proxy-wasm/internal/proxy"
 )
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
-	
+
 	go func() {
 		defer wg.Done()
 		// Wait for server to be ready
@@ -36,7 +36,7 @@ func main() {
 		time.Sleep(500 * time.Millisecond)
 		srv.Stop()
 	}()
-	
+
 	if err := srv.Start(); err != nil {
 		log.Fatal("fatal error serve", err)
 	}

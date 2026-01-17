@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # ScyllaDB - целевая база данных
+  scylla:
+    image: scylladb/scylla:5.2.1
+    container_name: scylla
+    ports:
+      - "9042:9042"
+      - "9142:9142"
+      - "7000:7000"
+      - "7001:7001"
+      - "9160:9160"
+    volumes:
+      - scylla_data:/var/lib/scylla
+    command: --smp 1 --memory 1G --overprovisioned 1
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT * FROM system.local WHERE key='local'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Scylla Proxy с WASM маскированием
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: scylla-proxy
+    ports:
+      - "9043:9042"  # Прокси слушает на 9043
+      - "8080:8080"  # Health endpoints
+      - "9090:9090"  # Prometheus metrics
+    volumes:
+      - ./wasm_scripts:/app/wasm_scripts:ro
+    environment:
+      - LISTEN_ADDR=0.0.0.0:9042
+      - TARGET_ADDR=scylla:9042
+      - WASMDIR=/app/wasm_scripts
+      - LOG_LEVEL=info
+      - HOT_RELOAD_ENABLED=true
+      - HOT_RELOAD_INTERVAL=5s
+      - METRICS_ENABLED=true
+      - METRICS_PORT=9090
+      - HEALTH_PORT=8080
+      - TLS_ENABLED=false
+    depends_on:
+      scylla:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Test Client для проверки работы прокси
+  test-client:
+    image: golang:1.23-alpine
+    container_name: test-client
+    volumes:
+      - ./test:/app
+      - ./scripts:/scripts
+    working_dir: /app
+    command: >
+      sh -c "
+        echo 'Waiting for proxy to be ready...' &&
+        sleep 5 &&
+        go run /scripts/test_integration.sh
+      "
+    depends_on:
+      proxy:
+        condition: service_healthy
+
+volumes:
+  scylla_data:
+
+networks:
+  default:
+    name: scylla-proxy-network

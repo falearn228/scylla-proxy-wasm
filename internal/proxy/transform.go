@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"log"
 
-	"github.com/user/scylla-proxy/internal/wasm"
+	"github.com/falearn/scylla-proxy-wasm/internal/wasm"
 )
 
 type Transformer struct {
