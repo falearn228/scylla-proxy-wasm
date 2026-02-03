@@ -45,7 +45,7 @@ func NewEngine(poolSize int) (*Engine, error) {
 }
 
 func (e *Engine) LoadModule(path string) error {
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read WASM file %s: %w", path, err)
 	}
@@ -95,7 +95,7 @@ func (e *Engine) ReloadModule(path string) error {
 	log.Printf("[HOT RELOAD] Reloading WASM module: %s", moduleName)
 
 	// Read new file
-	data, err := ioutil.ReadFile(path)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read WASM file %s: %w", path, err)
 	}
