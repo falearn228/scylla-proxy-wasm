@@ -541,31 +541,6 @@ func (m *CQLMessage) FindPIIParamIndex() int {
 	return -1
 }
 
-// IsEmailColumn returns true if the column at index is an email column
-func (m *CQLMessage) IsEmailColumn(colIdx int) bool {
-	if colIdx < 0 || colIdx >= len(m.Columns) {
-		return false
-	}
-
-	col := m.Columns[colIdx]
-	emailKeywords := []string{"email", "e-mail", "mail", "user_email", "contact_email"}
-
-	lowerName := bytes.ToLower([]byte(col.Name))
-	for _, kw := range emailKeywords {
-		if bytes.Contains(lowerName, []byte(kw)) {
-			return true
-		}
-	}
-
-	// Also check column type - varchar/text types are likely email
-	switch col.TypeCode {
-	case ColumnTypeVarchar, ColumnTypeASCII:
-		return false // Type alone is not enough, need name match
-	}
-
-	return false
-}
-
 // MaskPIIValues masks PII values in the message using the provided mask function
 // Returns the modified message bytes and whether any masking was applied
 func (m *CQLMessage) MaskPIIValues(maskFn func(columnName, value string) (string, error)) ([]byte, bool) {
